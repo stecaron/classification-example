@@ -1,0 +1,103 @@
+---
+title: "Labo 23 mars"
+author: "Anne-Sophie Charest/Stéphane Caron"
+date: "22 mars 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Le problème
+
+On utilise le jeu de données PimaIndiansDiabetes2 de la librairie mlbench. On souhaite prédire si un individu souffre de diabète à partir de 8 variables explicatives. Votre travail est d'ajuster quelques classifieurs vus en classe, de sélectionner correctement les hyperparamètre le cas échéant, et d'identifier le meilleur classifieur sur un jeu de données de validation. Je vous invite à suivre les étapes ci-bas pour ce faire
+
+### Explorer les données 
+
+Prenez quelques minutes pour analyser le jeu de données. Voici une liste de questions que vous pouvez explorer à l'aide de statistiques descriptives.
+
+* Quelle est la taille du jeu de données?
+* Quelle est la prévalence du diabète dans le jeu de données?
+* De quel type sont les différentes variables explicatives?
+* Semble-t-il y avoir une corrélation entre les différentes variables explicatives?
+* Quelles variables semblent les plus utiles pour prédire le diabète?
+* Y a-t-il des données manquantes?
+
+
+```{r }
+library(mlbench)
+data("PimaIndiansDiabetes2")
+
+#On renomme le jeu de données
+dat = PimaIndiansDiabetes2
+
+summary(dat)
+
+```
+
+### Tirer un jeu de données de validation 
+
+On conservera 50 observations au hasard pour tester les différents classifieurs obtenus. J'ai déjà tiré ces 50 observations pour qu'on teste tous sur le même jeu de données.   
+
+```{r }
+#Le code que j'ai utilisé pour choisir les 50 observations; ne pas rouler
+#set.seed(15)
+#idx = sample(768,50,replace = F)
+#a = cat(idx, sep = ",")
+#a = paste(idx,collapse = ",") 
+#b = paste( "c(", a, ")", collapse = "")
+
+#Les index des 50 observations à conserver dans le jeu de validation
+#Vous n'avez qu'a
+index_test = c( 463,150,741,498,281,755,622,194,523,632,80,490,385,534,651,634,337,725,106,582,602,593,267,44,421,757,758,110,687,353,368,190,362,87,377,483,89,378,221,555,667,333,669,188,249,311,239,543,608,8 )
+
+dat_test = dat[index_test,] #À garder pour la fin
+dat_train = dat[-index_test,] #À utiliser pour obtenir les classifieurs
+```
+
+### Obtenir différents classifieurs 
+
+L'idée ici est d'ajuster différents modèles vus en classe sur le jeu de données. Vous devrez parfois choisir un ou des hyperparamètres pour le modèle; utilisez dans ce cas la validation croisée. Voici une liste des classifieurs vus en classe:
+
+* Méthode du plus proche voisin (k à choisir)
+* Classifieur naif de Bayes (loi normale ou estimation de densité par noyau)
+* Régression logistique (choisir variables à inclure dans le modèle et point de coupure)
+* Analyse discriminante linéaire
+* Analyse discriminante quadratique 
+* Arbre de régression (nombre de divisions et critère de division à choisir)
+* Forêt aléatoire (plusieurs choix possibles, incluant le nombre d'arbres, et le nombre de variables à tester à chaque division)
+
+Je vous invite à commencer par les arbres et les forêts aléatoires puisque vous n'avez pas encore utilisé ces fonctions avec R. Testez ensuite les modèles de votre choix. 
+
+Notez que dans certains cas vous aurez des problèmes avec les données manquantes. Vous pouvez simplement décider de ne pas utiliser ces classifieurs, ou alors penser à une façon de gérer les données manquantes. 
+
+
+```{r }
+#Classifieur 1- 
+
+
+
+#Classifieur 2- 
+
+
+
+```
+
+
+
+### Testez vos modèles finaux sur le jeu de données de validation
+
+Il s'agit ici de tester tous les modèles ajustés précédemment sur le jeu de données de validation avec 50 observations. 
+
+* Quel est le meilleur modèle?
+* Que pouvez-vous dire de la précision de votre estimation de l'erreur de classification obtenue avec le jeu de données de validation?
+
+```{r }
+
+
+
+```
+
+
+
