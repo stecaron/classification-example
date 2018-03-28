@@ -310,16 +310,18 @@ out = predict(model, data_test_imputed)
 err_bag_test &lt;- sum(out != data_test_imputed[, diabetes]) / nrow(data_test_imputed)
 
 # Classifieur 3 - Random forrest
+var_imp &lt;- list()
 err_rf = rep(NA, k)
 err_rf &lt;- sapply(1:k, function(x){
-  model = randomForest(diabetes ~ ., data_cv_imputed[group != x, -(vec_remove), with = F], mtry = 5)
+  model = randomForest(diabetes ~ ., data_cv_imputed[group != x, -(vec_remove), with = F], mtry = 4, ntree = 1000)
+  var_imp[[x]] &lt;&lt;- importance(model)
   out = predict(model, data_cv_imputed[group == x, -(vec_remove), with = F])
   sum(out != data_cv_imputed[group == x, diabetes]) / nrow(data_cv_imputed[group == x,])
 })
-mean(err_rf)</code></pre>
-<pre><code>## [1] 0.2493153</code></pre>
-<pre class="r"><code># Test error
-model = randomForest(diabetes ~ ., data = data_train_imputed, mtry = 5)
+
+
+# Test error
+model = randomForest(diabetes ~ ., data = data_train_imputed, mtry = 4, ntree = 500)
 out = predict(model, data_test_imputed)
 err_rf_test &lt;- sum(out != data_test_imputed[, diabetes]) / nrow(data_test_imputed)
 
@@ -412,29 +414,29 @@ err_bayes_test &lt;- sum(out != data_test_imputed[, diabetes]) / nrow(data_test_
 <td align="center">0.22</td>
 </tr>
 <tr class="odd">
-<td align="center">Random forrest</td>
-<td align="center">0.249</td>
-<td align="center">0.24</td>
-</tr>
-<tr class="even">
 <td align="center">LDA</td>
 <td align="center">0.234</td>
 <td align="center">0.24</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td align="center">Arbre Gini</td>
 <td align="center">0.240</td>
 <td align="center">0.26</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td align="center">Bagging</td>
 <td align="center">0.249</td>
 <td align="center">0.26</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td align="center">Naive Bayes</td>
 <td align="center">0.258</td>
 <td align="center">0.26</td>
+</tr>
+<tr class="odd">
+<td align="center">Random forrest</td>
+<td align="center">0.248</td>
+<td align="center">0.28</td>
 </tr>
 <tr class="even">
 <td align="center">Arbre cross-entropy pruned</td>

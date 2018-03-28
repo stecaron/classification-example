@@ -179,16 +179,18 @@ out = predict(model, data_test_imputed)
 err_bag_test <- sum(out != data_test_imputed[, diabetes]) / nrow(data_test_imputed)
 
 # Classifieur 3 - Random forrest
+var_imp <- list()
 err_rf = rep(NA, k)
 err_rf <- sapply(1:k, function(x){
-  model = randomForest(diabetes ~ ., data_cv_imputed[group != x, -(vec_remove), with = F], mtry = 5)
+  model = randomForest(diabetes ~ ., data_cv_imputed[group != x, -(vec_remove), with = F], mtry = 4, ntree = 1000)
+  var_imp[[x]] <<- importance(model)
   out = predict(model, data_cv_imputed[group == x, -(vec_remove), with = F])
   sum(out != data_cv_imputed[group == x, diabetes]) / nrow(data_cv_imputed[group == x,])
 })
-mean(err_rf)
+
 
 # Test error
-model = randomForest(diabetes ~ ., data = data_train_imputed, mtry = 5)
+model = randomForest(diabetes ~ ., data = data_train_imputed, mtry = 4, ntree = 500)
 out = predict(model, data_test_imputed)
 err_rf_test <- sum(out != data_test_imputed[, diabetes]) / nrow(data_test_imputed)
 
