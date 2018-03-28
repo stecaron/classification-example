@@ -6,7 +6,7 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 ```
 
 ## Le problème
@@ -25,15 +25,18 @@ Prenez quelques minutes pour analyser le jeu de données. Voici une liste de que
 * Y a-t-il des données manquantes?
 
 
-```{r }
+```{r data_exploration}
 library(mlbench)
+library(data.table)
 data("PimaIndiansDiabetes2")
 
 #On renomme le jeu de données
-dat = PimaIndiansDiabetes2
+dat = data.table(PimaIndiansDiabetes2)
 
 summary(dat)
-
+dim(dat)
+table(dat$diabetes)
+apply(apply(dat, 2, is.na), 2, sum)/nrow(dat)
 ```
 
 ### Tirer un jeu de données de validation 
@@ -72,15 +75,115 @@ Je vous invite à commencer par les arbres et les forêts aléatoires puisque vo
 
 Notez que dans certains cas vous aurez des problèmes avec les données manquantes. Vous pouvez simplement décider de ne pas utiliser ces classifieurs, ou alors penser à une façon de gérer les données manquantes. 
 
+```{r cv_function}
+create_folder <- function(k, data){
+  
+  n <- nrow(data)
+  # Shuffle the data
+  data <-  data[sample(1:n, replace = F),]
+  # Create the groups
+  data$group <- cut(seq(1, nrow(data)), breaks = 10, labels = FALSE)
 
-```{r }
-#Classifieur 1- 
+  return(data)
+}
+
+```
 
 
 
-#Classifieur 2- 
+```{r classfiers}
+# Create cross-validation data
+k = 10
+data_cv <- create_folder(k, dat_train)
+
+# Classifieur 1 - Arbre classique 
+library(rpart)
+
+# Arbre 1 - Gini
+err_tree_1 = rep(NA, k)
+err_tree_1 <- sapply(1:k, function(x){
+  model = rpart(diabetes ~ ., data = data_cv[group != x,])
+  out = predict(model, data_cv[group == x,], type = "class")
+  sum(out != data_cv[group == x, diabetes]) / nrow(data_cv[group == x,])
+})
 
 
+# Arbre 2 - Cross-entropy
+err_tree_2 = rep(NA, k)
+err_tree_2 <- sapply(1:k, function(x){
+  model = rpart(diabetes ~ ., data = data_cv[group != x,], parms = list(split = "information"))
+  out = predict(model, data_cv[group == x,], type = "class")
+  sum(out != data_cv[group == x, diabetes]) / nrow(data_cv[group == x,])
+})
+
+
+plot <- list()
+for (x in 1:k) {
+  model = rpart(diabetes ~ ., data = data_cv[group != x,], parms = list(split = "information"))
+  pdf(NULL)
+  dev.control(displaylist="enable")
+  plotcp(model)
+  plot[[x]] <- recordPlot()
+  invisible(dev.off())
+}
+
+# Arbre 3 - Cross-entropy pruned
+err_tree_3 = rep(NA, k)
+err_tree_3 <- sapply(1:k, function(x){
+  model = rpart(diabetes ~ ., data = data_cv[group != x,], parms = list(split = "information"))
+  model = prune.rpart(model, cp = 0.0)
+  out = predict(model, data_cv[group == x,], type = "class")
+  sum(out != data_cv[group == x, diabetes]) / nrow(data_cv[group == x,])
+})
+
+# On est mieux de ne pas pruner ici ...
+
+# Classifieur 2 - Arbres bagging
+library(randomForest)
+
+# Impute the data very roughly
+data_cv_imputed <- na.roughfix(data_cv)
+err_bag = rep(NA, k)
+err_bag <- sapply(1:k, function(x){
+  model = randomForest(diabetes ~ ., data = data_cv_imputed[group != x,], mtry = ncol(data_cv) - 1)
+  out = predict(model, data_cv_imputed[group == x,])
+  sum(out != data_cv_imputed[group == x, diabetes]) / nrow(data_cv_imputed[group == x,])
+})
+
+# Classifieur 3 - Random forrest
+err_rf = rep(NA, k)
+err_rf <- sapply(1:k, function(x){
+  model = randomForest(diabetes ~ ., data = data_cv_imputed[group != x,], mtry = floor(sqrt(ncol(data_cv) - 1)))
+  out = predict(model, data_cv_imputed[group == x,])
+  sum(out != data_cv_imputed[group == x, diabetes]) / nrow(data_cv_imputed[group == x,])
+})
+
+# Classifieur 4 - LDA
+library(MASS)
+err_lda = rep(NA, k)
+err_lda <- sapply(1:k, function(x){
+  model = lda(diabetes ~ ., data = data_cv_imputed[group != x,])
+  out = predict(model, data_cv_imputed[group == x,])$class
+  sum(out != data_cv_imputed[group == x, diabetes]) / nrow(data_cv_imputed[group == x,])
+})
+
+# Classifieur 5 - QDA
+err_qda = rep(NA, k)
+err_qda <- sapply(1:k, function(x){
+  model = qda(diabetes ~ ., data = data_cv_imputed[group != x,])
+  out = predict(model, data_cv_imputed[group == x,])$class
+  sum(out != data_cv_imputed[group == x, diabetes]) / nrow(data_cv_imputed[group == x,])
+})
+
+# Classieur 6 - Logistic regression
+err_log = rep(NA, k)
+thres <- 0.4
+err_log <- sapply(1:k, function(x){
+  model = glm(diabetes ~ ., data = data_cv_imputed[group != x,], family = "binomial")
+  out = predict(model, data_cv_imputed[group == x,])
+  out2 = ifelse(out >= thres, "pos", "neg")
+  sum(out2 != data_cv_imputed[group == x, diabetes]) / nrow(data_cv_imputed[group == x,])
+})
 
 ```
 
@@ -94,7 +197,8 @@ Il s'agit ici de tester tous les modèles ajustés précédemment sur le jeu de 
 * Que pouvez-vous dire de la précision de votre estimation de l'erreur de classification obtenue avec le jeu de données de validation?
 
 ```{r }
-
+vec_modele <- c("Arbre Gini", "Arbre cross-entropy", "Arbre cross-entropy pruned", "Bagging", "Random forrest")
+vec_validation <- c(mean(err_tree_1), mean(err_tree_2), mean(err_tree_3), mean(err_bag))
 
 
 ```

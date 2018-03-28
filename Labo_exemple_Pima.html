@@ -140,10 +140,11 @@ $(document).ready(function () {
 <li>Y a-t-il des données manquantes?</li>
 </ul>
 <pre class="r"><code>library(mlbench)
+library(data.table)
 data(&quot;PimaIndiansDiabetes2&quot;)
 
 #On renomme le jeu de données
-dat = PimaIndiansDiabetes2
+dat = data.table(PimaIndiansDiabetes2)
 
 summary(dat)</code></pre>
 <pre><code>##     pregnant         glucose         pressure         triceps     
@@ -170,6 +171,17 @@ summary(dat)</code></pre>
 ##           
 ##           
 ## </code></pre>
+<pre class="r"><code>dim(dat)</code></pre>
+<pre><code>## [1] 768   9</code></pre>
+<pre class="r"><code>table(dat$diabetes)</code></pre>
+<pre><code>## 
+## neg pos 
+## 500 268</code></pre>
+<pre class="r"><code>apply(apply(dat, 2, is.na), 2, sum)/nrow(dat)</code></pre>
+<pre><code>##    pregnant     glucose    pressure     triceps     insulin        mass 
+## 0.000000000 0.006510417 0.045572917 0.295572917 0.486979167 0.014322917 
+##    pedigree         age    diabetes 
+## 0.000000000 0.000000000 0.000000000</code></pre>
 </div>
 <div id="tirer-un-jeu-de-donnees-de-validation" class="section level3">
 <h3>Tirer un jeu de données de validation</h3>
@@ -202,11 +214,108 @@ dat_train = dat[-index_test,] #À utiliser pour obtenir les classifieurs</code><
 </ul>
 <p>Je vous invite à commencer par les arbres et les forêts aléatoires puisque vous n’avez pas encore utilisé ces fonctions avec R. Testez ensuite les modèles de votre choix.</p>
 <p>Notez que dans certains cas vous aurez des problèmes avec les données manquantes. Vous pouvez simplement décider de ne pas utiliser ces classifieurs, ou alors penser à une façon de gérer les données manquantes.</p>
-<pre class="r"><code>#Classifieur 1- 
+<pre class="r"><code>create_folder &lt;- function(k, data){
+  
+  n &lt;- nrow(data)
+  # Shuffle the data
+  data &lt;-  data[sample(1:n, replace = F),]
+  # Create the groups
+  data$group &lt;- cut(seq(1, nrow(data)), breaks = 10, labels = FALSE)
+
+  return(data)
+}</code></pre>
+<pre class="r"><code># Create cross-validation data
+k = 10
+data_cv &lt;- create_folder(k, dat_train)
+
+# Classifieur 1 - Arbre classique 
+library(rpart)
+
+# Arbre 1 - Gini
+err_tree_1 = rep(NA, k)
+err_tree_1 &lt;- sapply(1:k, function(x){
+  model = rpart(diabetes ~ ., data = data_cv[group != x,])
+  out = predict(model, data_cv[group == x,], type = &quot;class&quot;)
+  sum(out != data_cv[group == x, diabetes]) / nrow(data_cv[group == x,])
+})
 
 
+# Arbre 2 - Cross-entropy
+err_tree_2 = rep(NA, k)
+err_tree_2 &lt;- sapply(1:k, function(x){
+  model = rpart(diabetes ~ ., data = data_cv[group != x,], parms = list(split = &quot;information&quot;))
+  out = predict(model, data_cv[group == x,], type = &quot;class&quot;)
+  sum(out != data_cv[group == x, diabetes]) / nrow(data_cv[group == x,])
+})
 
-#Classifieur 2- </code></pre>
+
+plot &lt;- list()
+for (x in 1:k) {
+  model = rpart(diabetes ~ ., data = data_cv[group != x,], parms = list(split = &quot;information&quot;))
+  pdf(NULL)
+  dev.control(displaylist=&quot;enable&quot;)
+  plotcp(model)
+  plot[[x]] &lt;- recordPlot()
+  invisible(dev.off())
+}
+
+# Arbre 3 - Cross-entropy pruned
+err_tree_3 = rep(NA, k)
+err_tree_3 &lt;- sapply(1:k, function(x){
+  model = rpart(diabetes ~ ., data = data_cv[group != x,], parms = list(split = &quot;information&quot;))
+  model = prune.rpart(model, cp = 0.0)
+  out = predict(model, data_cv[group == x,], type = &quot;class&quot;)
+  sum(out != data_cv[group == x, diabetes]) / nrow(data_cv[group == x,])
+})
+
+# On est mieux de ne pas pruner ici ...
+
+# Classifieur 2 - Arbres bagging
+library(randomForest)
+
+# Impute the data very roughly
+data_cv_imputed &lt;- na.roughfix(data_cv)
+err_bag = rep(NA, k)
+err_bag &lt;- sapply(1:k, function(x){
+  model = randomForest(diabetes ~ ., data = data_cv_imputed[group != x,], mtry = ncol(data_cv) - 1)
+  out = predict(model, data_cv_imputed[group == x,])
+  sum(out != data_cv_imputed[group == x, diabetes]) / nrow(data_cv_imputed[group == x,])
+})
+
+# Classifieur 3 - Random forrest
+err_rf = rep(NA, k)
+err_rf &lt;- sapply(1:k, function(x){
+  model = randomForest(diabetes ~ ., data = data_cv_imputed[group != x,], mtry = floor(sqrt(ncol(data_cv) - 1)))
+  out = predict(model, data_cv_imputed[group == x,])
+  sum(out != data_cv_imputed[group == x, diabetes]) / nrow(data_cv_imputed[group == x,])
+})
+
+# Classifieur 4 - LDA
+library(MASS)
+err_lda = rep(NA, k)
+err_lda &lt;- sapply(1:k, function(x){
+  model = lda(diabetes ~ ., data = data_cv_imputed[group != x,])
+  out = predict(model, data_cv_imputed[group == x,])$class
+  sum(out != data_cv_imputed[group == x, diabetes]) / nrow(data_cv_imputed[group == x,])
+})
+
+# Classifieur 5 - QDA
+err_qda = rep(NA, k)
+err_qda &lt;- sapply(1:k, function(x){
+  model = qda(diabetes ~ ., data = data_cv_imputed[group != x,])
+  out = predict(model, data_cv_imputed[group == x,])$class
+  sum(out != data_cv_imputed[group == x, diabetes]) / nrow(data_cv_imputed[group == x,])
+})
+
+# Classieur 6 - Logistic regression
+err_log = rep(NA, k)
+thres &lt;- 0.4
+err_log &lt;- sapply(1:k, function(x){
+  model = glm(diabetes ~ ., data = data_cv_imputed[group != x,], family = &quot;binomial&quot;)
+  out = predict(model, data_cv_imputed[group == x,])
+  out2 = ifelse(out &gt;= thres, &quot;pos&quot;, &quot;neg&quot;)
+  sum(out2 != data_cv_imputed[group == x, diabetes]) / nrow(data_cv_imputed[group == x,])
+})</code></pre>
 </div>
 <div id="testez-vos-modeles-finaux-sur-le-jeu-de-donnees-de-validation" class="section level3">
 <h3>Testez vos modèles finaux sur le jeu de données de validation</h3>
@@ -215,6 +324,8 @@ dat_train = dat[-index_test,] #À utiliser pour obtenir les classifieurs</code><
 <li>Quel est le meilleur modèle?</li>
 <li>Que pouvez-vous dire de la précision de votre estimation de l’erreur de classification obtenue avec le jeu de données de validation?</li>
 </ul>
+<pre class="r"><code>vec_modele &lt;- c(&quot;Arbre Gini&quot;, &quot;Arbre cross-entropy&quot;, &quot;Arbre cross-entropy pruned&quot;, &quot;Bagging&quot;, &quot;Random forrest&quot;)
+vec_validation &lt;- c(mean(err_tree_1), mean(err_tree_2), mean(err_tree_3), mean(err_bag))</code></pre>
 </div>
 </div>
 
