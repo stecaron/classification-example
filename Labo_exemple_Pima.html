@@ -224,9 +224,12 @@ dat_train = dat[-index_test,] #À utiliser pour obtenir les classifieurs</code><
 
   return(data)
 }</code></pre>
-<pre class="r"><code># Create cross-validation data
+<pre class="r"><code>set.seed(666) #Number of the beast
+
+# Create cross-validation data
 k = 10
 data_cv &lt;- create_folder(k, dat_train)
+vec_remove &lt;- c(&quot;group&quot;)
 
 # Classifieur 1 - Arbre classique 
 library(rpart)
@@ -234,24 +237,35 @@ library(rpart)
 # Arbre 1 - Gini
 err_tree_1 = rep(NA, k)
 err_tree_1 &lt;- sapply(1:k, function(x){
-  model = rpart(diabetes ~ ., data = data_cv[group != x,])
-  out = predict(model, data_cv[group == x,], type = &quot;class&quot;)
+  model = rpart(diabetes ~ ., data = data_cv[group != x, -(vec_remove), with = F])
+  out = predict(model, data_cv[group == x, -(vec_remove), with = F], type = &quot;class&quot;)
   sum(out != data_cv[group == x, diabetes]) / nrow(data_cv[group == x,])
 })
+
+# Erreur test
+model = rpart(diabetes ~ ., data = dat_train)
+out = predict(model, dat_test, type = &quot;class&quot;)
+err_tree_1_test &lt;- sum(out != dat_test[, diabetes]) / nrow(dat_test)
+
 
 
 # Arbre 2 - Cross-entropy
 err_tree_2 = rep(NA, k)
 err_tree_2 &lt;- sapply(1:k, function(x){
-  model = rpart(diabetes ~ ., data = data_cv[group != x,], parms = list(split = &quot;information&quot;))
-  out = predict(model, data_cv[group == x,], type = &quot;class&quot;)
+  model = rpart(diabetes ~ ., data = data_cv[group != x, -(vec_remove), with = F], parms = list(split = &quot;information&quot;))
+  out = predict(model, data_cv[group == x, -(vec_remove), with = F], type = &quot;class&quot;)
   sum(out != data_cv[group == x, diabetes]) / nrow(data_cv[group == x,])
 })
+
+# Erreur test
+model = rpart(diabetes ~ ., data = dat_train, parms = list(split = &quot;information&quot;))
+out = predict(model, dat_test, type = &quot;class&quot;)
+err_tree_2_test &lt;- sum(out != dat_test[, diabetes]) / nrow(dat_test)
 
 
 plot &lt;- list()
 for (x in 1:k) {
-  model = rpart(diabetes ~ ., data = data_cv[group != x,], parms = list(split = &quot;information&quot;))
+  model = rpart(diabetes ~ ., data = data_cv[group != x, -(vec_remove), with = F], parms = list(split = &quot;information&quot;))
   pdf(NULL)
   dev.control(displaylist=&quot;enable&quot;)
   plotcp(model)
@@ -262,60 +276,113 @@ for (x in 1:k) {
 # Arbre 3 - Cross-entropy pruned
 err_tree_3 = rep(NA, k)
 err_tree_3 &lt;- sapply(1:k, function(x){
-  model = rpart(diabetes ~ ., data = data_cv[group != x,], parms = list(split = &quot;information&quot;))
+  model = rpart(diabetes ~ ., data = data_cv[group != x, -(vec_remove), with = F], parms = list(split = &quot;information&quot;))
   model = prune.rpart(model, cp = 0.0)
-  out = predict(model, data_cv[group == x,], type = &quot;class&quot;)
+  out = predict(model, data_cv[group == x, -(vec_remove), with = F], type = &quot;class&quot;)
   sum(out != data_cv[group == x, diabetes]) / nrow(data_cv[group == x,])
 })
 
-# On est mieux de ne pas pruner ici ...
+# Erreur test
+model = rpart(diabetes ~ ., data = dat_train, parms = list(split = &quot;information&quot;))
+model = prune.rpart(model, cp = 0.1)
+out = predict(model, dat_test, type = &quot;class&quot;)
+err_tree_3_test &lt;- sum(out != dat_test[, diabetes]) / nrow(dat_test)
+
 
 # Classifieur 2 - Arbres bagging
 library(randomForest)
 
 # Impute the data very roughly
 data_cv_imputed &lt;- na.roughfix(data_cv)
+data_test_imputed &lt;- na.roughfix(dat_test)
+data_train_imputed &lt;- na.roughfix(dat_train)
+
 err_bag = rep(NA, k)
 err_bag &lt;- sapply(1:k, function(x){
-  model = randomForest(diabetes ~ ., data = data_cv_imputed[group != x,], mtry = ncol(data_cv) - 1)
-  out = predict(model, data_cv_imputed[group == x,])
+  model = randomForest(diabetes ~ ., data = data_cv_imputed[group != x, -(vec_remove), with = F], mtry = ncol(data_cv) - 1)
+  out = predict(model, data_cv_imputed[group == x, -(vec_remove), with = F])
   sum(out != data_cv_imputed[group == x, diabetes]) / nrow(data_cv_imputed[group == x,])
 })
+
+# Test error
+model = randomForest(diabetes ~ ., data = data_train_imputed, mtry = (ncol(data_train_imputed) - 1))
+out = predict(model, data_test_imputed)
+err_bag_test &lt;- sum(out != data_test_imputed[, diabetes]) / nrow(data_test_imputed)
 
 # Classifieur 3 - Random forrest
 err_rf = rep(NA, k)
 err_rf &lt;- sapply(1:k, function(x){
-  model = randomForest(diabetes ~ ., data = data_cv_imputed[group != x,], mtry = floor(sqrt(ncol(data_cv) - 1)))
-  out = predict(model, data_cv_imputed[group == x,])
+  model = randomForest(diabetes ~ ., data_cv_imputed[group != x, -(vec_remove), with = F], mtry = 5)
+  out = predict(model, data_cv_imputed[group == x, -(vec_remove), with = F])
   sum(out != data_cv_imputed[group == x, diabetes]) / nrow(data_cv_imputed[group == x,])
 })
+mean(err_rf)</code></pre>
+<pre><code>## [1] 0.2493153</code></pre>
+<pre class="r"><code># Test error
+model = randomForest(diabetes ~ ., data = data_train_imputed, mtry = 5)
+out = predict(model, data_test_imputed)
+err_rf_test &lt;- sum(out != data_test_imputed[, diabetes]) / nrow(data_test_imputed)
 
 # Classifieur 4 - LDA
 library(MASS)
 err_lda = rep(NA, k)
 err_lda &lt;- sapply(1:k, function(x){
-  model = lda(diabetes ~ ., data = data_cv_imputed[group != x,])
-  out = predict(model, data_cv_imputed[group == x,])$class
+  model = lda(diabetes ~ ., data = data_cv_imputed[group != x, -(vec_remove), with = F])
+  out = predict(model, data_cv_imputed[group == x, -(vec_remove), with = F])$class
   sum(out != data_cv_imputed[group == x, diabetes]) / nrow(data_cv_imputed[group == x,])
 })
+
+# Test error
+model = lda(diabetes ~ ., data = data_train_imputed)
+out = predict(model, data_test_imputed)$class
+err_lda_test &lt;- sum(out != data_test_imputed[, diabetes]) / nrow(data_test_imputed)
 
 # Classifieur 5 - QDA
 err_qda = rep(NA, k)
 err_qda &lt;- sapply(1:k, function(x){
-  model = qda(diabetes ~ ., data = data_cv_imputed[group != x,])
-  out = predict(model, data_cv_imputed[group == x,])$class
+  model = qda(diabetes ~ ., data = data_cv_imputed[group != x, -(vec_remove), with = F])
+  out = predict(model, data_cv_imputed[group == x, -(vec_remove), with = F])$class
   sum(out != data_cv_imputed[group == x, diabetes]) / nrow(data_cv_imputed[group == x,])
 })
 
+# Test error
+model = qda(diabetes ~ ., data = data_train_imputed)
+out = predict(model, data_test_imputed)$class
+err_qda_test &lt;- sum(out != data_test_imputed[, diabetes]) / nrow(data_test_imputed)
+
 # Classieur 6 - Logistic regression
 err_log = rep(NA, k)
-thres &lt;- 0.4
+summary &lt;- list()
+thres &lt;- 0.4 # choisi par CV
 err_log &lt;- sapply(1:k, function(x){
-  model = glm(diabetes ~ ., data = data_cv_imputed[group != x,], family = &quot;binomial&quot;)
-  out = predict(model, data_cv_imputed[group == x,])
+  model = glm(diabetes ~ ., data = data_cv_imputed[group != x, -(c(vec_remove, &quot;triceps&quot;, &quot;insulin&quot;, &quot;pressure&quot;, &quot;age&quot;)), with = F], family = &quot;binomial&quot;)
+  summary[[x]] &lt;&lt;- summary(model)
+  out = predict(model, data_cv_imputed[group == x, -(c(vec_remove, &quot;triceps&quot;, &quot;insulin&quot;, &quot;pressure&quot;, &quot;age&quot;)), with = F])
   out2 = ifelse(out &gt;= thres, &quot;pos&quot;, &quot;neg&quot;)
   sum(out2 != data_cv_imputed[group == x, diabetes]) / nrow(data_cv_imputed[group == x,])
-})</code></pre>
+})
+
+# Test error
+model = glm(diabetes ~ ., data = data_train_imputed[, -(c(vec_remove, &quot;triceps&quot;, &quot;insulin&quot;, &quot;pressure&quot;, &quot;age&quot;)), with = F], family = &quot;binomial&quot;)
+out = predict(model, data_test_imputed[, -(c(vec_remove, &quot;triceps&quot;, &quot;insulin&quot;, &quot;pressure&quot;, &quot;age&quot;)), with = F])
+out2 = ifelse(out &gt;= thres, &quot;pos&quot;, &quot;neg&quot;)
+err_log_test &lt;- sum(out2 != data_test_imputed[, diabetes]) / nrow(data_test_imputed)
+
+
+# Classifieur 7- Naive Bayes
+library(e1071)
+
+err_bayes = rep(NA, k)
+err_bayes &lt;- sapply(1:k, function(x){
+  model = naiveBayes(diabetes ~ ., data = data_cv_imputed[group != x, -(vec_remove), with = F])
+  out = predict(model, data_cv_imputed[group == x, -(vec_remove), with = F])
+  sum(out != data_cv_imputed[group == x, diabetes]) / nrow(data_cv_imputed[group == x,])
+})
+
+# Test error
+model = naiveBayes(diabetes ~ ., data = data_train_imputed)
+out = predict(model, data_test_imputed)
+err_bayes_test &lt;- sum(out != data_test_imputed[, diabetes]) / nrow(data_test_imputed)</code></pre>
 </div>
 <div id="testez-vos-modeles-finaux-sur-le-jeu-de-donnees-de-validation" class="section level3">
 <h3>Testez vos modèles finaux sur le jeu de données de validation</h3>
@@ -324,8 +391,63 @@ err_log &lt;- sapply(1:k, function(x){
 <li>Quel est le meilleur modèle?</li>
 <li>Que pouvez-vous dire de la précision de votre estimation de l’erreur de classification obtenue avec le jeu de données de validation?</li>
 </ul>
-<pre class="r"><code>vec_modele &lt;- c(&quot;Arbre Gini&quot;, &quot;Arbre cross-entropy&quot;, &quot;Arbre cross-entropy pruned&quot;, &quot;Bagging&quot;, &quot;Random forrest&quot;)
-vec_validation &lt;- c(mean(err_tree_1), mean(err_tree_2), mean(err_tree_3), mean(err_bag))</code></pre>
+<table>
+<caption>Performances des différents classifieurs sur les jeux de données CV et test</caption>
+<thead>
+<tr class="header">
+<th align="center">Modèle</th>
+<th align="center">Erreur moyenne de validation</th>
+<th align="center">Erreur test</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="center">Reg. logistique</td>
+<td align="center">0.226</td>
+<td align="center">0.20</td>
+</tr>
+<tr class="even">
+<td align="center">QDA</td>
+<td align="center">0.255</td>
+<td align="center">0.22</td>
+</tr>
+<tr class="odd">
+<td align="center">Random forrest</td>
+<td align="center">0.249</td>
+<td align="center">0.24</td>
+</tr>
+<tr class="even">
+<td align="center">LDA</td>
+<td align="center">0.234</td>
+<td align="center">0.24</td>
+</tr>
+<tr class="odd">
+<td align="center">Arbre Gini</td>
+<td align="center">0.240</td>
+<td align="center">0.26</td>
+</tr>
+<tr class="even">
+<td align="center">Bagging</td>
+<td align="center">0.249</td>
+<td align="center">0.26</td>
+</tr>
+<tr class="odd">
+<td align="center">Naive Bayes</td>
+<td align="center">0.258</td>
+<td align="center">0.26</td>
+</tr>
+<tr class="even">
+<td align="center">Arbre cross-entropy pruned</td>
+<td align="center">0.242</td>
+<td align="center">0.30</td>
+</tr>
+<tr class="odd">
+<td align="center">Arbre cross-entropy</td>
+<td align="center">0.242</td>
+<td align="center">0.32</td>
+</tr>
+</tbody>
+</table>
 </div>
 </div>
 
